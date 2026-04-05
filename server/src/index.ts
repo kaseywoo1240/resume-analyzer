@@ -20,7 +20,17 @@ const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 
 app.use(
   cors({
-    origin: CLIENT_URL,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, curl, etc.)
+      if (!origin) return callback(null, true);
+      // Allow localhost for local dev
+      if (origin.includes('localhost')) return callback(null, true);
+      // Allow any vercel.app subdomain
+      if (origin.includes('vercel.app')) return callback(null, true);
+      // Allow the explicit CLIENT_URL
+      if (origin === CLIENT_URL) return callback(null, true);
+      callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
