@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import path from 'path';
 
 // Import routes
@@ -15,6 +16,32 @@ import './db';
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+
+// ─── Rate limiters ───────────────────────────────────────────────────────────
+
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts, please try again in 15 minutes.' },
+});
+
+const aiLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'AI request limit reached. Please wait an hour before trying again.' },
+});
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 
@@ -45,10 +72,11 @@ app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
-app.use('/api/auth', authRoutes);
+app.use('/api', generalLimiter);
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/resume', resumeRoutes);
-app.use('/api/analysis', analysisRoutes);
-app.use('/api/generate', generateRoutes);
+app.use('/api/analysis', aiLimiter, analysisRoutes);
+app.use('/api/generate', aiLimiter, generateRoutes);
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 
