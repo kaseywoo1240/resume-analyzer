@@ -8,6 +8,11 @@ const router = Router();
 
 // ─── POST /api/auth/register ─────────────────────────────────────────────────
 router.post('/register', async (req: Request, res: Response): Promise<void> => {
+  if (process.env.REGISTRATION_OPEN !== 'true') {
+    res.status(403).json({ error: 'Registration is currently closed.' });
+    return;
+  }
+
   const email    = sanitizeEmail(req.body?.email);
   const password = sanitizeString(req.body?.password);
   const name     = limitLength(sanitizeString(req.body?.name), 100);
