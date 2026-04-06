@@ -4,6 +4,7 @@ import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { generateImprovedResume } from '../services/claude';
 import { generatePdf, generateWord } from '../services/pdfGenerator';
 import { sendResumeEmail } from '../services/emailService';
+import { sanitizeId, sanitizeString } from '../utils/sanitize';
 
 const router = Router();
 
@@ -47,14 +48,13 @@ router.get('/resume/:id', requireAuth, (req: AuthenticatedRequest, res: Response
 
 // ─── POST /api/generate/resume ────────────────────────────────────────────────
 router.post('/resume', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const { analysisId } = req.body as { analysisId?: number | string };
-
-  if (!analysisId) {
-    res.status(400).json({ error: 'analysisId is required' });
+  let analysisIdNum: number;
+  try {
+    analysisIdNum = sanitizeId(req.body?.analysisId);
+  } catch {
+    res.status(400).json({ error: 'analysisId is required and must be a positive integer' });
     return;
   }
-
-  const analysisIdNum = Number(analysisId);
 
   try {
     const analysis = db
@@ -169,17 +169,15 @@ router.get('/saved', requireAuth, (req: AuthenticatedRequest, res: Response): vo
 
 // ─── POST /api/generate/download ─────────────────────────────────────────────
 router.post('/download', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const { generatedResumeId, format } = req.body as {
-    generatedResumeId?: number | string;
-    format?: 'pdf' | 'word';
-  };
-
-  if (!generatedResumeId) {
+  let generatedResumeId: number;
+  try {
+    generatedResumeId = sanitizeId(req.body?.generatedResumeId);
+  } catch {
     res.status(400).json({ error: 'generatedResumeId is required' });
     return;
   }
 
-  const fmt = format || 'pdf';
+  const fmt = sanitizeString(req.body?.format) || 'pdf';
   if (!['pdf', 'word'].includes(fmt)) {
     res.status(400).json({ error: 'format must be "pdf" or "word"' });
     return;
@@ -190,7 +188,7 @@ router.post('/download', requireAuth, async (req: AuthenticatedRequest, res: Res
       .prepare<[number, number], GeneratedResumeRow>(
         'SELECT * FROM generated_resumes WHERE id = ? AND user_id = ?'
       )
-      .get(Number(generatedResumeId), req.userId!);
+      .get(generatedResumeId, req.userId!);
 
     if (!generated) {
       res.status(404).json({ error: 'Generated resume not found' });
@@ -227,24 +225,22 @@ router.post('/download', requireAuth, async (req: AuthenticatedRequest, res: Res
 
 // ─── POST /api/generate/email ─────────────────────────────────────────────────
 router.post('/email', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const { generatedResumeId, format } = req.body as {
-    generatedResumeId?: number | string;
-    format?: 'pdf' | 'word';
-  };
-
-  if (!generatedResumeId) {
+  let generatedResumeId: number;
+  try {
+    generatedResumeId = sanitizeId(req.body?.generatedResumeId);
+  } catch {
     res.status(400).json({ error: 'generatedResumeId is required' });
     return;
   }
 
-  const fmt = format || 'pdf';
+  const fmt = sanitizeString(req.body?.format) || 'pdf';
 
   try {
     const generated = db
       .prepare<[number, number], GeneratedResumeRow>(
         'SELECT * FROM generated_resumes WHERE id = ? AND user_id = ?'
       )
-      .get(Number(generatedResumeId), req.userId!);
+      .get(generatedResumeId, req.userId!);
 
     if (!generated) {
       res.status(404).json({ error: 'Generated resume not found' });

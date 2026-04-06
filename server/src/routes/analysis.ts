@@ -3,26 +3,20 @@ import db, { ResumeRow, AnalysisRow } from '../db';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { scrapeJobDescription } from '../services/scraper';
 import { analyzeResumeWithClaude } from '../services/claude';
+import { sanitizeUrl, sanitizeId } from '../utils/sanitize';
 
 const router = Router();
 
 // ─── POST /api/analysis/run ───────────────────────────────────────────────────
 router.post('/run', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const { jobUrl, resumeId } = req.body as {
-    jobUrl?: string;
-    resumeId?: number;
-  };
+  let jobUrl: string;
+  let resumeId: number;
 
-  if (!jobUrl || !resumeId) {
-    res.status(400).json({ error: 'jobUrl and resumeId are required' });
-    return;
-  }
-
-  // Validate URL format
   try {
-    new URL(jobUrl);
-  } catch {
-    res.status(400).json({ error: 'Invalid jobUrl — must be a valid URL' });
+    jobUrl = sanitizeUrl(req.body?.jobUrl);
+    resumeId = sanitizeId(req.body?.resumeId);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Invalid input' });
     return;
   }
 

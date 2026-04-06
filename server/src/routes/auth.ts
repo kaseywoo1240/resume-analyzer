@@ -2,16 +2,15 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import db, { UserRow } from '../db';
+import { sanitizeString, sanitizeEmail, limitLength } from '../utils/sanitize';
 
 const router = Router();
 
 // ─── POST /api/auth/register ─────────────────────────────────────────────────
 router.post('/register', async (req: Request, res: Response): Promise<void> => {
-  const { email, password, name } = req.body as {
-    email?: string;
-    password?: string;
-    name?: string;
-  };
+  const email    = sanitizeEmail(req.body?.email);
+  const password = sanitizeString(req.body?.password);
+  const name     = limitLength(sanitizeString(req.body?.name), 100);
 
   if (!email || !password || !name) {
     res.status(400).json({ error: 'email, password, and name are required' });
@@ -20,6 +19,11 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
 
   if (password.length < 6) {
     res.status(400).json({ error: 'Password must be at least 6 characters' });
+    return;
+  }
+
+  if (password.length > 128) {
+    res.status(400).json({ error: 'Password too long' });
     return;
   }
 
@@ -32,7 +36,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
   try {
     const existing = db
       .prepare<[string], UserRow>('SELECT id FROM users WHERE email = ?')
-      .get(email.toLowerCase());
+      .get(email);
 
     if (existing) {
       res.status(409).json({ error: 'Email already registered' });
@@ -43,23 +47,14 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
 
     const result = db
       .prepare('INSERT INTO users (email, password, name) VALUES (?, ?, ?)')
-      .run(email.toLowerCase(), hashedPassword, name.trim());
+      .run(email, hashedPassword, name);
 
     const userId = result.lastInsertRowid as number;
 
     const secret = process.env.JWT_SECRET!;
-    const token = jwt.sign({ userId, email: email.toLowerCase() }, secret, {
-      expiresIn: '7d',
-    });
+    const token = jwt.sign({ userId, email }, secret, { expiresIn: '7d' });
 
-    res.status(201).json({
-      token,
-      user: {
-        id: userId,
-        email: email.toLowerCase(),
-        name: name.trim(),
-      },
-    });
+    res.status(201).json({ token, user: { id: userId, email, name } });
   } catch (err) {
     console.error('Registration error:', err);
     const message = err instanceof Error ? err.message : String(err);
@@ -69,10 +64,8 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
 
 // ─── POST /api/auth/login ────────────────────────────────────────────────────
 router.post('/login', async (req: Request, res: Response): Promise<void> => {
-  const { email, password } = req.body as {
-    email?: string;
-    password?: string;
-  };
+  const email    = sanitizeEmail(req.body?.email);
+  const password = sanitizeString(req.body?.password);
 
   if (!email || !password) {
     res.status(400).json({ error: 'email and password are required' });
@@ -82,7 +75,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
   try {
     const user = db
       .prepare<[string], UserRow>('SELECT * FROM users WHERE email = ?')
-      .get(email.toLowerCase());
+      .get(email);
 
     if (!user) {
       res.status(401).json({ error: 'Invalid email or password' });
@@ -96,18 +89,9 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     }
 
     const secret = process.env.JWT_SECRET!;
-    const token = jwt.sign({ userId: user.id, email: user.email }, secret, {
-      expiresIn: '7d',
-    });
+    const token = jwt.sign({ userId: user.id, email: user.email }, secret, { expiresIn: '7d' });
 
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-      },
-    });
+    res.json({ token, user: { id: user.id, email: user.email, name: user.name } });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Login failed' });
