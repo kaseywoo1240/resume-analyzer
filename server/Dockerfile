@@ -22,7 +22,7 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-RUN mkdir -p data uploads
+RUN mkdir -p data uploads && chmod 777 data uploads
 
 EXPOSE 3001
 
